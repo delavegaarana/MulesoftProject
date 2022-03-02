@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+xmlns:file="http://www.mulesoft.org/schema/mule/file"
+xmlns:http="http://www.mulesoft.org/schema/mule/http"
+xmlns:azure-data-lake-storage="http://www.mulesoft.org/schema/mule/azure-data-lake-storage"
+xmlns="http://www.mulesoft.org/schema/mule/core"
+xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-data-lake-storage http://www.mulesoft.org/schema/mule/azure-data-lake-storage/current/mule-azure-data-lake-storage.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+<http:listener-connection host="0.0.0.0" port="8081" />
+</http:listener-config>
+<azure-data-lake-storage:config name="Azure_Data_Lake_Storage_Connector_Config" doc:name="Azure Data Lake Storage Connector Config">
+<azure-data-lake-storage:shared-access-signature-connection accountName="${account.name}" dnsSuffix="${dns.suffix}" sasToken="${sas.token}" />
+</azure-data-lake-storage:config>
+<global-property doc:name="Global Property" doc:id="f44646b8-432e-441f-99be-1bac6d0efd6a" name="env" value="local" />
+<configuration-properties doc:name="Configuration properties" file="${env}.yaml" />
+	<file:config name="File_Config" doc:name="File Config" doc:id="30edda5d-d396-41c3-808d-e7d364e88741" />
+	<flow name="create-file-system-flow">
+<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="create-fs"/>
+<azure-data-lake-storage:create-file-system doc:name="Create File System" config-ref="Azure_Data_Lake_Storage_Connector_Config" filesystem="newfilesystem"/>
+</flow>
+	<flow name="create-path-flow" doc:id="2b0a073f-7a77-425f-bc76-68cbf074ab44" >
+		<http:listener doc:name="Listener" doc:id="397ed304-8b54-49a8-99e4-ffffc9549dde" config-ref="HTTP_Listener_config" path="create-path"/>
+		<azure-data-lake-storage:create-or-rename doc:name="Create/Rename Path" doc:id="981df68a-b451-40ab-9f13-fbc7155b9787" config-ref="Azure_Data_Lake_Storage_Connector_Config" fileSystem="newfilesystem" path="newpath" resource="directory"/>
+	</flow>
+	<flow name="update-path-flow" doc:id="e534a457-14c8-475c-9d1d-34adedcd2e5e" >
+		<http:listener doc:name="Listener" doc:id="59d7c125-a236-421d-8405-5017af4c2c6e" config-ref="HTTP_Listener_config" path="update-path"/>
+		<file:read doc:name="Read" doc:id="a07900ff-90e2-488e-b1ee-50803559b2fe" config-ref="File_Config" path="${file.path}"/>
+		<set-variable value="#[attributes.size]" doc:name="Set fileSize" doc:id="ebf20f33-7894-4bba-adbc-45b8a2d33709" variableName="fileSize"/>
+		<azure-data-lake-storage:update-path doc:name="Update Path" doc:id="87f44d88-97c9-45bc-bb5c-666b0edd3695" config-ref="Azure_Data_Lake_Storage_Connector_Config" fileSystem="${filesystem.name}" path="${path.name}" action="append" position="0" contentLength="#[vars.fileSize]"/>
+		<azure-data-lake-storage:update-path action="flush" doc:name="Update Path" doc:id="335b8ae7-c8c3-4f62-9393-117ec1924ed1" config-ref="Azure_Data_Lake_Storage_Connector_Config" fileSystem="${filesystem.name}" path="${path.name}" position="#[vars.fileSize]" contentLength="0"/>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="ccc4cd03-5467-4c8e-9c6e-477ceaedf3f4" >
+				<ee:transform doc:name="Transform Message" doc:id="6c89b850-24dc-4338-a563-225b18cad8d4" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+error.errorMessage.payload]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="ERROR" doc:name="Log error code" doc:id="960d313b-ec72-4588-87fc-7320d5f0f6a8" message='#["ERROR: " ++ error.muleMessage.typedValue.error.code as String]'/>
+				<logger level="ERROR" doc:name="Log error message" doc:id="a5f08775-58ee-41ab-8125-8c1802275104" message='#["ERROR: " ++ error.muleMessage.typedValue.error.message as String]'/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+
+
+</mule>
