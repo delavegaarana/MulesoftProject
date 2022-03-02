@@ -1,0 +1,8 @@
+account:
+ name: ''
+dns:
+  suffix: ''
+sas:
+  token: ''
+file:
+  path: '\home'
